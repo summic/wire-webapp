@@ -20,7 +20,6 @@
 import ko from 'knockout';
 import {amplify} from 'amplify';
 import {WebAppEvents} from '@wireapp/webapp-events';
-import type {ConversationMemberJoinEvent} from '@wireapp/api-client/src/event';
 
 import {t} from 'Util/LocalizerUtil';
 import {Logger, getLogger} from 'Util/Logger';
@@ -38,7 +37,6 @@ import {ServiceEntity} from './ServiceEntity';
 import {ServiceTag} from './ServiceTag';
 import {ConversationError} from '../error/ConversationError';
 import {ProviderEntity} from './ProviderEntity';
-import {MemberLeaveEvent} from '../conversation/EventBuilder';
 import {container} from 'tsyringe';
 import {TeamState} from '../team/TeamState';
 import {ConversationState} from '../conversation/ConversationState';
@@ -109,10 +107,7 @@ export class IntegrationRepository {
    * @param serviceEntity Service to be added to conversation
    * @param method Method used to add service
    */
-  addService(
-    conversationEntity: Conversation,
-    serviceEntity: ServiceEntity,
-  ): Promise<ConversationMemberJoinEvent | void> {
+  addService(conversationEntity: Conversation, serviceEntity: ServiceEntity): Promise<void> {
     const {id: serviceId, name, providerId} = serviceEntity;
     this.logger.info(`Adding service '${name}' to conversation '${conversationEntity.id}'`, serviceEntity);
 
@@ -221,7 +216,7 @@ export class IntegrationRepository {
    * @param conversationEntity Conversation to remove service from
    * @param userEntity Service user to be removed from the conversation
    */
-  removeService(conversationEntity: Conversation, userEntity: User): Promise<MemberLeaveEvent> {
+  removeService(conversationEntity: Conversation, userEntity: User): Promise<void> {
     const {id: userId} = userEntity;
     return this.conversationRepository.removeService(conversationEntity, userId);
   }
