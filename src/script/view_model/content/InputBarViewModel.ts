@@ -813,25 +813,29 @@ export class InputBarViewModel {
   readonly sendGiphy = (gifUrl: string, tag: string): void => {
     const conversationEntity = this.conversationEntity();
     const replyMessageEntity = this.replyMessageEntity();
-    this._generateQuote(replyMessageEntity).then(quoteEntity => {
+    void (async () => {
+      const quoteEntity = await this.generateQuote(replyMessageEntity);
       this.messageRepository.sendGif(conversationEntity, gifUrl, tag, quoteEntity);
       this.cancelMessageEditing(true);
-    });
+    })();
   };
 
-  private readonly _generateQuote = (replyMessageEntity: ContentMessage): Promise<QuoteEntity | undefined> => {
-    return !replyMessageEntity
-      ? Promise.resolve(undefined)
-      : this.eventRepository.eventService
-          .loadEvent(replyMessageEntity.conversation_id, replyMessageEntity.id)
-          .then(MessageHasher.hashEvent)
-          .then((messageHash: ArrayBuffer) => {
-            return new QuoteEntity({
-              hash: messageHash,
-              messageId: replyMessageEntity.id,
-              userId: replyMessageEntity.from,
-            });
-          });
+  private readonly generateQuote = async (replyMessageEntity: ContentMessage): Promise<QuoteEntity | undefined> => {
+    if (replyMessageEntity) {
+      const event = await this.eventRepository.eventService.loadEvent(
+        replyMessageEntity.conversation_id,
+        replyMessageEntity.id,
+      );
+      const messageHash = await MessageHasher.hashEvent(event);
+
+      return new QuoteEntity({
+        hash: messageHash,
+        messageId: replyMessageEntity.id,
+        userId: replyMessageEntity.from,
+      });
+    }
+
+    return undefined;
   };
 
   readonly sendMessage = (messageText: string, replyMessageEntity: ContentMessage): void => {
@@ -840,7 +844,7 @@ export class InputBarViewModel {
     }
 
     const mentionEntities = this.currentMentions.slice(0);
-    this._generateQuote(replyMessageEntity).then(quoteEntity => {
+    this.generateQuote(replyMessageEntity).then(quoteEntity => {
       this.messageRepository.sendTextWithLinkPreview(
         this.conversationEntity(),
         messageText,

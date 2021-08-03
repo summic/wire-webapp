@@ -127,10 +127,11 @@ describe('EventRepository', () => {
         return Promise.resolve(notification);
       });
 
-      jest.spyOn(testFactory.notification_service, 'getLastNotificationIdFromDb').mockImplementation(() => {
-        return last_notification_id
-          ? Promise.resolve(last_notification_id)
-          : Promise.reject(new EventError(EventError.TYPE.NO_LAST_ID, EventError.MESSAGE.NO_LAST_ID));
+      jest.spyOn(testFactory.notification_service, 'getLastNotificationIdFromDb').mockImplementation(async () => {
+        if (last_notification_id) {
+          return last_notification_id;
+        }
+        throw new EventError(EventError.TYPE.NO_LAST_ID, EventError.MESSAGE.NO_LAST_ID);
       });
 
       jest
@@ -643,9 +644,9 @@ describe('EventRepository', () => {
       const linkPreviewEvent = {...event};
       jest
         .spyOn(testFactory.event_service, 'loadEvent')
-        .mockImplementation((conversationId: string, messageId: string) => {
-          return messageId === replacingId ? Promise.resolve(undefined) : Promise.resolve(storedEvent);
-        });
+        .mockImplementation(async (conversationId: string, messageId: string) =>
+          messageId === replacingId ? undefined : storedEvent,
+        );
       jest
         .spyOn(testFactory.event_service, 'replaceEvent')
         .mockImplementation((ev: EventRecord) => Promise.resolve(ev));

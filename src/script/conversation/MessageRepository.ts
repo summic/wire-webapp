@@ -1610,15 +1610,15 @@ export class MessageRepository {
    * @returns Resolves when the confirmation was sent
    */
   public sendCallingMessage(eventInfoEntity: EventInfoEntity, conversationId: string) {
-    return this.messageSender.queueMessage(() => {
+    return this.messageSender.queueMessage(async () => {
       const options = eventInfoEntity.options;
-      const recipientsPromise = options.recipients
-        ? Promise.resolve(eventInfoEntity)
-        : this.createRecipients(conversationId, false).then(recipients => {
+      const infoEntity = options.recipients
+        ? eventInfoEntity
+        : await this.createRecipients(conversationId, false).then(recipients => {
             eventInfoEntity.updateOptions({recipients});
             return eventInfoEntity;
           });
-      return recipientsPromise.then(infoEntity => this.sendGenericMessage(infoEntity, true));
+      return await this.sendGenericMessage(infoEntity, true);
     });
   }
 
