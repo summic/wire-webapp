@@ -38,6 +38,7 @@ export interface EventRecord<T = any> {
   content?: string;
   conversation: string;
   data: T;
+  domain: string;
   edited_time?: string;
   ephemeral_expires?: boolean | string | number;
   ephemeral_started?: number;

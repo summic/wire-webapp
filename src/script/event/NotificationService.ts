@@ -184,7 +184,7 @@ export class NotificationService {
           event.type === CONVERSATION_EVENT.OTR_MESSAGE_ADD &&
           event.time === message.time &&
           event.from === message.from &&
-          event.conversation === message.conversation
+          event.qualified_conversation?.domain === message.domain
         );
       });
 
