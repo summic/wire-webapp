@@ -74,7 +74,7 @@ const DeviceDetails: React.FC<DeviceDetailsProps> = ({
     if (selectedClient) {
       cryptographyRepository
         .getRemoteFingerprint(user.id, selectedClient.id)
-        .then(remoteFingerprint => setFingerprintRemote(remoteFingerprint));
+        .then(remoteFingerprint => setFingerprintRemote(remoteFingerprint.join('')));
     }
   }, [selectedClient]);
 

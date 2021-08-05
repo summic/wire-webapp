@@ -32,7 +32,7 @@ import type {PreKey as BackendPreKey} from '@wireapp/api-client/src/auth/';
 import {StatusCodes as HTTP_STATUS} from 'http-status-codes';
 
 import {getLogger, Logger} from 'Util/Logger';
-import {arrayToBase64, base64ToArray} from 'Util/util';
+import {arrayToBase64, base64ToArray, zeroPadding} from 'Util/util';
 
 import {CryptographyMapper} from './CryptographyMapper';
 import {Config} from '../Config';
@@ -123,9 +123,9 @@ export class CryptographyRepository {
     userIds: string[] | QualifiedId[],
     conversationDomain?: string,
   ): Promise<void> {
-    const crudEngine = this.storageRepository.storageService['engine'];
+    const crudEngine = this.storageRepository.storageService.engine;
     const storeEngineProvider = () => Promise.resolve(crudEngine);
-    const apiClient = this.cryptographyService['apiClient'];
+    const apiClient = this.cryptographyService.apiClient;
 
     const account = new Account(apiClient, storeEngineProvider);
     await account.initServices(crudEngine);
@@ -158,8 +158,8 @@ export class CryptographyRepository {
    * Get the fingerprint of the local identity.
    * @returns Fingerprint of local identity public key
    */
-  getLocalFingerprint(): string {
-    return this.cryptobox.getIdentity().public_key.fingerprint();
+  getLocalFingerprint() {
+    return this.formatFingerprint(this.cryptobox.getIdentity().public_key.fingerprint()).join('');
   }
 
   /**
@@ -169,11 +169,15 @@ export class CryptographyRepository {
    * @param preKey PreKey to initialize a session from
    * @returns Resolves with the remote fingerprint
    */
-  async getRemoteFingerprint(userId: string, clientId: string, preKey?: BackendPreKey): Promise<string> {
+  async getRemoteFingerprint(userId: string, clientId: string, preKey?: BackendPreKey): Promise<string[]> {
     const cryptoboxSession = preKey
       ? await this.createSessionFromPreKey(preKey, userId, clientId)
       : await this.loadSession(userId, clientId);
-    return cryptoboxSession ? cryptoboxSession.fingerprint_remote() : undefined;
+    return cryptoboxSession ? this.formatFingerprint(cryptoboxSession.fingerprint_remote()) : [];
+  }
+
+  private formatFingerprint(fingerprint: string): string[] {
+    return zeroPadding(fingerprint, 16).match(/.{1,2}/g) || [];
   }
 
   /**
@@ -509,11 +513,15 @@ export class CryptographyRepository {
       : CryptographyRepository.CONFIG.UNKNOWN_DECRYPTION_ERROR_CODE;
 
     const {data: eventData, from: remoteUserId, time: formattedTime} = event;
-
+    // TODO Federation fix: Skip decryption errors
+    const isFederationError =
+      Config.getConfig().FEATURE.ENABLE_FEDERATION === true &&
+      (event as any).qualified_conversation &&
+      (event as any).qualified_conversation.domain !== Config.getConfig().FEATURE.FEDERATION_DOMAIN;
     const isDuplicateMessage = error instanceof ProteusErrors.DecryptError.DuplicateMessage;
     const isOutdatedMessage = error instanceof ProteusErrors.DecryptError.OutdatedMessage;
     // We don't need to show these message errors to the user
-    if (isDuplicateMessage || isOutdatedMessage) {
+    if (isDuplicateMessage || isOutdatedMessage || isFederationError) {
       const message = `Message from user ID "${remoteUserId}" at "${formattedTime}" will not be handled because it is outdated or a duplicate.`;
       throw new CryptographyError(CryptographyError.TYPE.UNHANDLED_TYPE, message);
     }

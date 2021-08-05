@@ -25,7 +25,6 @@ import ko from 'knockout';
 import {formatTimestamp} from 'Util/TimeUtil';
 import {getLogger, Logger} from 'Util/Logger';
 import {t} from 'Util/LocalizerUtil';
-import {splitFingerprint} from 'Util/StringUtil';
 
 import {ActionsViewModel} from '../ActionsViewModel';
 import {ClientEntity} from '../../client/ClientEntity';
@@ -90,7 +89,7 @@ export class PreferencesDeviceDetailsViewModel {
     this.fingerprint([]);
     try {
       const fingerprint = await this.cryptographyRepository.getRemoteFingerprint(this.selfUser().id, this.device().id);
-      this.fingerprint(splitFingerprint(fingerprint));
+      this.fingerprint(fingerprint);
     } catch (error) {
       this.logger.warn('Error while trying to update fingerprint', error);
     }

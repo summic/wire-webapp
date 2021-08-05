@@ -635,8 +635,8 @@ export class InputBarViewModel {
 
     if (this.isEditing()) {
       this.sendMessageEdit(messageText, this.editMessageEntity());
-    } else if (this.conversationEntity().isRemoteConversation) {
-      this.sendFederatedMessage(messageText);
+    } else if (this.conversationEntity().isFederated()) {
+      this.sendFederatedMessage(messageText, this.conversationEntity());
     } else {
       this.sendMessage(messageText, this.replyMessageEntity());
     }
@@ -836,12 +836,12 @@ export class InputBarViewModel {
           });
   };
 
-  readonly sendFederatedMessage = (messageText: string): void => {
+  readonly sendFederatedMessage = (messageText: string, conversation: Conversation): void => {
     if (!messageText.length) {
       return;
     }
 
-    this.messageRepository.sendFederatedMessage(messageText);
+    this.messageRepository.sendFederatedMessage(messageText, conversation);
     this.cancelMessageReply();
   };
 

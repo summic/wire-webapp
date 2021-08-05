@@ -35,7 +35,6 @@ import type {CryptographyRepository} from '../../cryptography/CryptographyReposi
 import type {MessageRepository} from '../../conversation/MessageRepository';
 import type {TeamRepository} from '../../team/TeamRepository';
 import type {User} from '../../entity/User';
-import {splitFingerprint} from 'Util/StringUtil';
 import {KEY} from 'Util/KeyboardUtil';
 
 export class LegalHoldModalViewModel {
@@ -129,12 +128,11 @@ export class LegalHoldModalViewModel {
     if (!fingerprint) {
       const response = await this.teamRepository.teamService.getLegalHoldState(selfUser.teamId, selfUser.id);
       if (response.status === LegalHoldMemberStatus.PENDING) {
-        const fingerprintString = await this.cryptographyRepository.getRemoteFingerprint(
+        fingerprint = await this.cryptographyRepository.getRemoteFingerprint(
           selfUser.id,
           response.client.id,
           response.last_prekey,
         );
-        fingerprint = splitFingerprint(fingerprintString);
         selfUser.hasPendingLegalHold(true);
       } else {
         setModalParams(false);
