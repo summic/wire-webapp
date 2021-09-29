@@ -49,7 +49,7 @@ import {t} from 'Util/LocalizerUtil';
 import {Logger, getLogger} from 'Util/Logger';
 import {createRandomUuid} from 'Util/util';
 import {TIME_IN_MILLIS} from 'Util/TimeUtil';
-import {flatten, getDifference} from 'Util/ArrayUtil';
+import {flatten} from 'Util/ArrayUtil';
 import {roundLogarithmic} from 'Util/NumberUtil';
 
 import {Config} from '../Config';
@@ -57,7 +57,7 @@ import {GENERIC_MESSAGE_TYPE} from '../cryptography/GenericMessageType';
 import {ModalsViewModel} from '../view_model/ModalsViewModel';
 import {CALL_MESSAGE_TYPE} from './enum/CallMessageType';
 import {ConversationRepository} from '../conversation/ConversationRepository';
-import {CallingEvent, EventBuilder} from '../conversation/EventBuilder';
+import {CallingEvent, EventBuilder, QualifiedIdOptional} from '../conversation/EventBuilder';
 import {EventInfoEntity, MessageSendingOptions} from '../conversation/EventInfoEntity';
 import {EventRepository} from '../event/EventRepository';
 import {MediaType} from '../media/MediaType';
@@ -181,7 +181,7 @@ export class CallingRepository {
       }
       const isSpeakersViewActive = this.callState.isSpeakersViewActive();
       if (isSpeakersViewActive) {
-        this.requestVideoStreams(call, call.activeSpeakers());
+        this.requestVideoStreams(call.conversationId, call.activeSpeakers());
       }
     });
   }
@@ -271,11 +271,12 @@ export class CallingRepository {
   }
 
   private async pushClients(conversationId: ConversationId): Promise<void> {
+    const qualifiedConversationId: QualifiedIdOptional = {domain: null, id: conversationId};
     try {
       await this.apiClient.conversation.api.postOTRMessage(this.selfClientId, conversationId);
     } catch (error) {
       const mismatch: ClientMismatch = (error as AxiosError).response!.data;
-      const localClients = await this.messageRepository.createRecipients(conversationId);
+      const localClients = await this.messageRepository.createRecipients(qualifiedConversationId);
 
       const makeClientList = (recipients: UserClients): ClientListEntry[] =>
         Object.entries(recipients).reduce(
@@ -310,7 +311,7 @@ export class CallingRepository {
         [GENERIC_MESSAGE_TYPE.CALLING]: new Calling({content: ''}),
         messageId: createRandomUuid(),
       });
-      const eventInfoEntity = new EventInfoEntity(genericMessage, conversationId);
+      const eventInfoEntity = new EventInfoEntity(genericMessage, qualifiedConversationId);
       eventInfoEntity.setType(GENERIC_MESSAGE_TYPE.CALLING);
       await this.messageRepository.clientMismatchHandler.onClientMismatch(eventInfoEntity, localMismatch);
 
@@ -407,9 +408,6 @@ export class CallingRepository {
     const conversation = this.conversationState.findConversation(call.conversationId);
     if (conversation) {
       conversation.call(null);
-    }
-    if (this.callState.requestedVideoStreams.call === call) {
-      this.callState.requestedVideoStreams = {call: undefined, participants: []};
     }
   }
 
@@ -511,8 +509,12 @@ export class CallingRepository {
   //##############################################################################
 
   private async verificationPromise(conversationId: string, userId: string, isResponse: boolean): Promise<void> {
-    const recipients = await this.messageRepository.createRecipients(conversationId, false, [userId]);
-    const eventInfoEntity = new EventInfoEntity(undefined, conversationId, {recipients});
+    const qualifiedConversationId: QualifiedIdOptional = {
+      domain: null,
+      id: conversationId /*TODO(federation): get conversation domain*/,
+    };
+    const recipients = await this.messageRepository.createRecipients(qualifiedConversationId, false, [userId]);
+    const eventInfoEntity = new EventInfoEntity(undefined, qualifiedConversationId, {recipients});
     eventInfoEntity.setType(GENERIC_MESSAGE_TYPE.CALLING);
     const consentType = isResponse
       ? ConversationRepository.CONSENT_TYPE.INCOMING_CALL
@@ -621,7 +623,7 @@ export class CallingRepository {
         const ignoreNotificationStates = [CALL_STATE.MEDIA_ESTAB, CALL_STATE.ANSWERED, CALL_STATE.OUTGOING];
         if (!activeCall || !ignoreNotificationStates.includes(activeCall.state())) {
           // we want to ignore call start events that already have an active call (whether it's ringing or connected).
-          this.injectActivateEvent(conversationId, userId, time, source);
+          this.injectActivateEvent({domain: null, id: conversationId}, userId, time, source);
         }
         break;
     }
@@ -770,7 +772,9 @@ export class CallingRepository {
 
   changeCallPage(newPage: number, call: Call): void {
     call.currentPage(newPage);
-    this.requestCurrentPageVideoStreams();
+    if (!this.callState.isSpeakersViewActive()) {
+      this.requestCurrentPageVideoStreams();
+    }
   }
 
   requestCurrentPageVideoStreams(): void {
@@ -779,25 +783,15 @@ export class CallingRepository {
       return;
     }
     const currentPageParticipants = call.pages()[call.currentPage()];
-    this.requestVideoStreams(call, currentPageParticipants);
+    this.requestVideoStreams(call.conversationId, currentPageParticipants);
   }
 
-  requestVideoStreams(call: Call, participants: Participant[]) {
-    const callAlreadyRequested = call === this.callState.requestedVideoStreams.call;
-    const requestedParticipants = this.callState.requestedVideoStreams.participants;
-    const participantsAlreadyRequested =
-      participants.length === requestedParticipants.length &&
-      getDifference(participants, requestedParticipants).length === 0;
-
-    if (callAlreadyRequested && participantsAlreadyRequested) {
-      return;
-    }
-
+  requestVideoStreams(conversationId: string, participants: Participant[]) {
     const payload = {
       clients: participants.map(participant => ({clientid: participant.clientId, userid: participant.user.id})),
-      convid: call.conversationId,
+      convid: conversationId,
     };
-    this.wCall.requestVideoStreams(this.wUser, call.conversationId, VSTREAMS.LIST, JSON.stringify(payload));
+    this.wCall.requestVideoStreams(this.wUser, conversationId, VSTREAMS.LIST, JSON.stringify(payload));
   }
 
   readonly leaveCall = (conversationId: ConversationId): void => {
@@ -916,13 +910,13 @@ export class CallingRepository {
     return recipients;
   }
 
-  private injectActivateEvent(conversationId: ConversationId, userId: UserId, time: string, source: string): void {
+  private injectActivateEvent(conversationId: QualifiedIdOptional, userId: UserId, time: string, source: string): void {
     const event = EventBuilder.buildVoiceChannelActivate(conversationId, userId, time, this.avsVersion);
     this.eventRepository.injectEvent(event as unknown as EventRecord, source as EventSource);
   }
 
   private injectDeactivateEvent(
-    conversationId: ConversationId,
+    conversationId: QualifiedIdOptional,
     userId: UserId,
     duration: number,
     reason: REASON,
@@ -984,13 +978,17 @@ export class CallingRepository {
     payload: string | Object,
     options?: MessageSendingOptions,
   ): Promise<ClientMismatch> => {
+    const qualifiedConversationId: QualifiedIdOptional = {
+      domain: null,
+      id: conversationId /*TODO(federation): get conversation domain*/,
+    };
     const protoCalling = new Calling({content: typeof payload === 'string' ? payload : JSON.stringify(payload)});
     const genericMessage = new GenericMessage({
       [GENERIC_MESSAGE_TYPE.CALLING]: protoCalling,
       messageId: createRandomUuid(),
     });
-    const eventInfoEntity = new EventInfoEntity(genericMessage, conversationId, options);
-    return this.messageRepository.sendCallingMessage(eventInfoEntity, conversationId);
+    const eventInfoEntity = new EventInfoEntity(genericMessage, qualifiedConversationId, options);
+    return this.messageRepository.sendCallingMessage(eventInfoEntity, qualifiedConversationId);
   };
 
   private readonly sendSFTRequest = (
@@ -1080,7 +1078,7 @@ export class CallingRepository {
 
     if (!stillActiveState.includes(reason)) {
       this.injectDeactivateEvent(
-        call.conversationId,
+        {domain: null /*TODO(federation): get conversation domain*/, id: call.conversationId},
         call.initiator,
         call.startedAt() ? Date.now() - call.startedAt() : 0,
         reason,
@@ -1340,7 +1338,7 @@ export class CallingRepository {
     }
 
     const [stream] = streams;
-    if (stream.getVideoTracks().length > 0) {
+    if (stream.getVideoTracks().length > 0 && participant.videoStream() !== stream) {
       participant.videoStream(stream);
     }
   };

@@ -19,6 +19,7 @@
 
 import {StatusType} from '../../message/StatusType';
 import type {ReactionType} from '@wireapp/core/src/main/conversation/';
+import {QualifiedIdOptional} from 'src/script/conversation/EventBuilder';
 
 export interface ReadReceipt {
   domain?: string;
@@ -36,7 +37,7 @@ export interface AssetRecord {
 export type UserReactionMap = {[userId: string]: ReactionType};
 
 export interface EventRecord<T = any> {
-  category: number;
+  category?: number;
   client?: {time: string};
   connection?: {lastUpdate: string};
   content?: string;
@@ -49,8 +50,9 @@ export interface EventRecord<T = any> {
   error_code?: string;
   from: string;
   from_client_id?: string;
-  id: string;
+  id?: string;
   mentions?: string[];
+  qualified_conversation?: QualifiedIdOptional;
   message?: string;
   previews?: string[];
   /** Only used with IndexedDB table 'event' */
